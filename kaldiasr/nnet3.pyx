@@ -52,7 +52,7 @@ cdef extern from "nnet3_wrappers.h" namespace "kaldi":
 
     cdef cppclass NNet3OnlineModelWrapper:
         NNet3OnlineModelWrapper() except +
-        NNet3OnlineModelWrapper(float, int, int, float, float, int, string, string, string, string, string, string) except +
+        NNet3OnlineModelWrapper(float, int, int, float, float, int, string, string, string, string, string, string, string) except +
 
     cdef cppclass NNet3OnlineDecoderWrapper:
         NNet3OnlineDecoderWrapper() except +
@@ -62,6 +62,7 @@ cdef extern from "nnet3_wrappers.h" namespace "kaldi":
 
         void get_decoded_string(string &, float &) except +
         bint get_word_alignment(vector[string] &, vector[int] &, vector[int] &) except +
+        bint get_word_alignment_and_prons(vector[string] &, vector[int] &, vector[int] &, vector[vector[string]] &, vector[vector[int]] &) except +
 
 cdef class KaldiNNet3OnlineModel:
 
@@ -92,6 +93,7 @@ cdef class KaldiNNet3OnlineModel:
 
         cdef unicode mfcc_config           = u'%s/conf/mfcc_hires.conf'                  % self.modeldir
         cdef unicode word_symbol_table     = u'%s/%s/graph/words.txt'                    % (self.modeldir, self.model)
+        cdef unicode phone_symbol_table    = u'%s/%s/graph/phones.txt'                   % (self.modeldir, self.model)
         cdef unicode model_in_filename     = u'%s/%s/final.mdl'                          % (self.modeldir, self.model)
         cdef unicode splice_conf_filename  = u'%s/ivectors_test_hires/conf/splice.conf'  % self.modeldir
         cdef unicode fst_in_str            = u'%s/%s/graph/HCLG.fst'                     % (self.modeldir, self.model)
@@ -101,7 +103,7 @@ cdef class KaldiNNet3OnlineModel:
         # make sure all model files required exist
         #
 
-        for conff in [mfcc_config, word_symbol_table, model_in_filename, splice_conf_filename, fst_in_str, align_lex_filename]:
+        for conff in [mfcc_config, word_symbol_table, phone_symbol_table, model_in_filename, splice_conf_filename, fst_in_str, align_lex_filename]:
             if not os.path.isfile(conff.encode('utf8')): 
                 raise Exception ('%s not found.' % conff)
             if not os.access(conff.encode('utf8'), os.R_OK):
@@ -138,6 +140,7 @@ cdef class KaldiNNet3OnlineModel:
                                                          acoustic_scale, 
                                                          frame_subsampling_factor, 
                                                          word_symbol_table.encode('utf8'), 
+                                                         phone_symbol_table.encode('utf-8'),
                                                          model_in_filename.encode('utf8'), 
                                                          fst_in_str.encode('utf8'), 
                                                          mfcc_config.encode('utf8'),
@@ -182,6 +185,17 @@ cdef class KaldiNNet3OnlineDecoder:
         if not self.decoder_wrapper.get_word_alignment(words, times, lengths):
             return None
         return words, times, lengths
+
+    def get_word_alignment_and_prons(self):
+        cdef vector[string] words
+        cdef vector[int] times
+        cdef vector[int] lengths
+        cdef vector[vector[string]] prons
+        cdef vector[vector[int]] phone_lengths
+
+        if not self.decoder_wrapper.get_word_alignment_and_prons(words, times, lengths, prons, phone_lengths):
+            return None
+        return words, times, lengths, prons, phone_lengths
 
     #
     # various convenience functions below

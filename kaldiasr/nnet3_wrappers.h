@@ -44,6 +44,7 @@ namespace kaldi {
                                 BaseFloat    acoustic_scale, 
                                 int32        frame_subsampling_factor, 
                                 std::string &word_syms_filename, 
+                                std::string &phone_syms_filename,
                                 std::string &model_in_filename,
                                 std::string &fst_in_str,
                                 std::string &mfcc_config,
@@ -55,6 +56,7 @@ namespace kaldi {
     private:
 
         fst::SymbolTable                          *word_syms;
+        fst::SymbolTable                          *phone_syms;
 
         // feature_config includes configuration for the iVector adaptation,
         // as well as the basic features.
@@ -91,6 +93,12 @@ namespace kaldi {
         bool               get_word_alignment(std::vector<string> &words,
                                               std::vector<int32>  &times,
                                               std::vector<int32>  &lengths);
+        bool               get_word_alignment_and_prons(std::vector<string> &words,
+                                              std::vector<int32>  &times,
+                                              std::vector<int32>  &lengths,
+                                              std::vector<std::vector<string>> &prons,
+                                              std::vector<std::vector<int32>> &phone_lengths);
+
 
     private:
 

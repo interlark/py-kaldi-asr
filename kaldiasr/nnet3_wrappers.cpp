@@ -215,7 +215,71 @@ namespace kaldi {
         return true;
     }
 
+    bool NNet3OnlineDecoderWrapper::get_word_alignment_and_prons(std::vector<string> &words,
+                                                                 std::vector<int32>  &times,
+                                                                 std::vector<int32>  &lengths,
+                                                                 std::vector<std::vector<string>> &prons,
+                                                                 std::vector<std::vector<int32>> &phone_lengths) {
+        
+        WordAlignLatticeLexiconInfo lexicon_info(model->word_alignment_lexicon);
 
+#if VERBOSE
+        KALDI_LOG << "word alignment and prons starts...";
+#endif
+        CompactLattice aligned_clat;
+        WordAlignLatticeLexiconOpts opts;
+
+        bool ok = WordAlignLatticeLexicon(best_path_clat, model->trans_model, lexicon_info, opts, &aligned_clat);
+
+        if (!ok) {
+            KALDI_WARN << "Lattice did not align correctly";
+            return false;
+        } else {
+            if (aligned_clat.Start() == fst::kNoStateId) {
+                KALDI_WARN << "Lattice was empty";
+                return false;
+            } else {
+#if VERBOSE
+                KALDI_LOG << "Aligned lattice.";
+#endif
+                TopSortCompactLatticeIfNeeded(&aligned_clat);
+
+                // lattice-1best
+                CompactLattice best_path_aligned;
+                CompactLatticeShortestPath(aligned_clat, &best_path_aligned); 
+
+                // nbest-to-ctm
+                std::vector<int32> word_idxs;
+                std::vector<std::vector<int32>> phone_idxs;
+                if (!CompactLatticeToWordProns(model->trans_model, best_path_aligned, &word_idxs, &times,
+                                &lengths, &phone_idxs, &phone_lengths)) {
+                    KALDI_WARN << "CompactLatticeToWordProns failed.";
+                    return false;
+                }
+
+                // lexicon lookup
+                words.clear();
+                for (size_t i = 0; i < word_idxs.size(); i++) {
+                    std::string s = model->word_syms->Find(word_idxs[i]);
+                    if (s == "") {
+                        KALDI_ERR << "Word-id " << word_idxs[i] << " not in words symbol table.";
+                    }
+                    words.push_back(s);
+
+                    std::vector<std::string> word_prons;
+                    for(size_t j = 0; j<phone_lengths[i].size(); j++) {
+                        std::string c = model->phone_syms->Find(phone_idxs[i][j]);
+                        if (c == "") {
+                            KALDI_ERR << "Pron-id " << phone_idxs[i][j] << " not in phones symbol table.";
+                        }
+                        word_prons.push_back(c);
+                    }
+                    prons.push_back(word_prons);
+                }
+            }
+        }
+        return true;
+    }
 
     bool NNet3OnlineDecoderWrapper::decode(BaseFloat samp_freq, int32 num_frames, BaseFloat *frames, bool finalize) {
 
@@ -292,7 +356,8 @@ namespace kaldi {
                                                      BaseFloat    lattice_beam,
                                                      BaseFloat    acoustic_scale, 
                                                      int32        frame_subsampling_factor,
-                                                     std::string &word_syms_filename, 
+                                                     std::string &word_syms_filename,
+                                                     std::string &phone_syms_filename, 
                                                      std::string &model_in_filename,
                                                      std::string &fst_in_str,
                                                      std::string &mfcc_config,
@@ -349,6 +414,12 @@ namespace kaldi {
           if (!(word_syms = fst::SymbolTable::ReadText(word_syms_filename)))
             KALDI_ERR << "Could not read symbol table from file "
                        << word_syms_filename;
+
+        phone_syms = NULL;
+        if (phone_syms_filename != "") 
+          if (!(phone_syms = fst::SymbolTable::ReadText(phone_syms_filename)))
+            KALDI_ERR << "Could not read symbol table from file "
+                       << phone_syms_filename;
 
 #if VERBOSE
         KALDI_LOG << "loading word alignment lexicon...";
